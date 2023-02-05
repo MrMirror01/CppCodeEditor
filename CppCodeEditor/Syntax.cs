@@ -27,6 +27,9 @@ namespace CppCodeEditor
 	public class SyntaxContainer
 	{
 		public string textColor { get; set; }
+		public string classColor { get; set; }
+		public string variableColor { get; set; }
+		public List<string> typenames { get; set; }
 		public KeywordInfo keywordInfo { get; set; }
 		public SpecialsInfo specialsInfo { get; set; }
 		public Dictionary<string, Wrapper> wrappers { get; set; }

@@ -1,5 +1,15 @@
 {
   "textColor": "#000000",
+  "classColor": "#DF60FA",
+  "variableColor": "#1F4D31",
+
+  "typenames": [
+    "int",
+    "bool",
+    "char",
+    "double",
+    "float"
+  ],
 
   "keywordInfo": {
     "keywords": [
@@ -126,13 +136,18 @@
       ";",
       "@"
     ],
-    "color" : "#FF0000"
+    "color": "#FF0000"
   },
 
   "wrappers": {
     "string": {
       "start": "\"",
       "end": "\"",
+      "color": "#A8781E"
+    },
+    "char": {
+      "start": "\\'",
+      "end": "\\'",
       "color": "#A8781E"
     },
     "multiline-comment": {
@@ -146,7 +161,7 @@
       "color": "#E0E0E0"
     },
     "preprocess": {
-      "start": "#",
+      "start": "^#",
       "end": "\n|$",
       "color": "#22CC22"
     }

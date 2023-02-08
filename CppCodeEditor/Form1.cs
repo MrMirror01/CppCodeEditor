@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Windows.Input;
@@ -20,6 +21,9 @@ namespace CppCodeEditor
 		const int WM_USER = 0x400;
 		const int EM_HIDESELECTION = WM_USER + 63;
 
+		//Semaphore semaphore = new Semaphore(1, 1);
+		bool wrongSelection = false;
+		int rightSelection = 0;
 
 		public String savePath = "";
 		public String deafultSaveLocation = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
@@ -48,11 +52,37 @@ namespace CppCodeEditor
 		
 		private void codeArea_TextChanged(object sender, EventArgs e)
 		{
-			colorKeywords();
+			//semaphore.WaitOne();
+			if (wrongSelection)
+			{
+				codeArea.SelectionStart = rightSelection;
+				wrongSelection = false;
+			}
+
+			if (codeArea.Text.Length <= 1)
+			{
+				//semaphore.Release();
+				return;
+			}
+
+			int poc;
+			for (poc = codeArea.SelectionStart - 1; poc >= 0; poc--)
+			{
+				if (codeArea.Text[poc] == '\n') break;
+			}
+			if (poc < 0) poc = 0;
+			int kraj;
+			for (kraj = codeArea.SelectionStart; kraj < codeArea.Text.Length; kraj++)
+			{
+				if (codeArea.Text[kraj] == '\n') break;
+			}
+			colorKeywords(codeArea.Text.Substring(poc, kraj - poc), poc);
+			//semaphore.Release();
 		}
 
-		private void colorKeywords()
+		private void colorKeywords(String text, int textStartIndex)
 		{
+			Console.WriteLine(text);
 			int selectedIndex = codeArea.SelectionStart;
 
 			//deselectamo codeArea i skrijemo selection
@@ -61,7 +91,7 @@ namespace CppCodeEditor
 
 
 			//sva slova pobjamo u deafult boju
-			codeArea.SelectAll();
+			codeArea.Select(textStartIndex, text.Length);
 			codeArea.SelectionColor = ColorTranslator.FromHtml(Syntax.syntax.textColor);
 
 			//detektiramo sva imena klasa i struktura
@@ -92,40 +122,42 @@ namespace CppCodeEditor
 
 			//pobojamo sva pojavljivanja imena klase
 			Regex classRegex = new Regex(@"\b(" + string.Join("|", classNames) + @")\b");
-			MatchCollection foundClasses = classRegex.Matches(codeArea.Text);
+			MatchCollection foundClasses = classRegex.Matches(text);
 			foreach (Match match in foundClasses)
 			{
-				codeArea.Select(match.Index, match.Length);
+				codeArea.Select(match.Index + textStartIndex, match.Length);
 				codeArea.SelectionColor = ColorTranslator.FromHtml(Syntax.syntax.classColor);
+				Console.WriteLine("--" + match.Value + "--");
 			}
 
 			//pobojamo sva pojavljivanja imena varijabli
 			Regex varRegex = new Regex(@"\b(" + string.Join("|", variableNames) + @")\b");
-			MatchCollection foundVars = varRegex.Matches(codeArea.Text);
+			MatchCollection foundVars = varRegex.Matches(text);
 			foreach (Match match in foundVars)
 			{
-				codeArea.Select(match.Index, match.Length);
+				codeArea.Select(match.Index + textStartIndex, match.Length);
 				codeArea.SelectionColor = ColorTranslator.FromHtml(Syntax.syntax.variableColor);
+				Console.WriteLine("++" + match.Value + "++");
 			}
 
 			// formira regex oblika "\b(keyword1|keyword2|keyword3)\b" 
 			Regex keywordRegex = new Regex(@"\b(" + string.Join("|", Syntax.syntax.keywordInfo.keywords) + @")\b");
-			MatchCollection foundKeywords = keywordRegex.Matches(codeArea.Text);
+			MatchCollection foundKeywords = keywordRegex.Matches(text);
 			//pobojamo sve kljucne rjeci
 			foreach (Match match in foundKeywords)
 			{
-				codeArea.Select(match.Index,  match.Length);
+				codeArea.Select(match.Index + textStartIndex,  match.Length);
 				codeArea.SelectionColor = ColorTranslator.FromHtml(Syntax.syntax.keywordInfo.color);
 			}
 
 			//detektiramo sve specialne znakove
 			string specias = @"(" + string.Join("|", Syntax.syntax.specialsInfo.specials) + @")";
 			Regex specialsRegex = new Regex(specias);
-			MatchCollection foundSpecials = specialsRegex.Matches(codeArea.Text);
+			MatchCollection foundSpecials = specialsRegex.Matches(text);
 			//pobojamo sve kljucne rjeci
 			foreach (Match match in foundSpecials)
 			{
-				codeArea.Select(match.Index, match.Length);
+				codeArea.Select(match.Index + textStartIndex, match.Length);
 				codeArea.SelectionColor = ColorTranslator.FromHtml(Syntax.syntax.specialsInfo.color);
 			}
 
@@ -146,14 +178,18 @@ namespace CppCodeEditor
 			codeArea.Focus();
 			SendMessage(codeArea.Handle, EM_HIDESELECTION, 0, 0);
 
+			codeArea.SelectionStart = codeArea.SelectionStart;
+
 			//resetiramo poziciju i boju selekcije
-			codeArea.SelectionStart = selectedIndex;
+			codeArea.DeselectAll();
 			codeArea.SelectionLength = 0;
+			codeArea.SelectionStart = selectedIndex;
 			codeArea.SelectionColor = ColorTranslator.FromHtml(Syntax.syntax.textColor);
 		}
 
 		private void codeArea_KeyPress(object sender, KeyPressEventArgs e)
 		{
+			//semaphore.WaitOne();
 			if (e.KeyChar == '(' || e.KeyChar == '[' || e.KeyChar == '{')
 			{
 				//deselectamo codeArea i skrijemo selection
@@ -162,12 +198,16 @@ namespace CppCodeEditor
 
 				int selectedIndex = codeArea.SelectionStart;
 				e.Handled = true;
+				//semaphore.Release();
+				wrongSelection = true;
+				rightSelection = codeArea.SelectionStart;
 				if (e.KeyChar == '(')
-					codeArea.Text = codeArea.Text.Insert(codeArea.SelectionStart, "()");
+					codeArea.SelectedText = "()";
 				else if (e.KeyChar == '[')
-					codeArea.Text = codeArea.Text.Insert(codeArea.SelectionStart, "[]");
+					codeArea.SelectedText = "[]";
 				else
-					codeArea.Text = codeArea.Text.Insert(codeArea.SelectionStart, "{}");
+					codeArea.SelectedText = "{}";
+				//semaphore.WaitOne();
 				codeArea.SelectionStart = selectedIndex + 1;
 				codeArea.SelectionLength = 0;
 
@@ -186,7 +226,7 @@ namespace CppCodeEditor
 				{
 					currentWord = currentWord.Insert(0, codeArea.Text[i].ToString());
 				}
-
+				
 				int selected = codeArea.SelectionStart;
 				if (currentWord != "")
 				{
@@ -194,26 +234,36 @@ namespace CppCodeEditor
 					{
 						if (name.StartsWith(currentWord) && name != currentWord)
 						{
-							codeArea.Text = codeArea.Text.Remove(selected - currentWord.Length, currentWord.Length).Insert(selected - currentWord.Length, name);
+							//semaphore.Release();
+							wrongSelection = true;
+							rightSelection = codeArea.SelectionStart;
+							codeArea.Select(selected - currentWord.Length, currentWord.Length);
+							codeArea.SelectedText = name;
+							//semaphore.WaitOne();
 							e.Handled = true;
 							codeArea.SelectionStart = selected + (name.Length - currentWord.Length);
 
 							//vratimo focus na code area i ponovno prikazemo selekciju
 							codeArea.Focus();
 							SendMessage(codeArea.Handle, EM_HIDESELECTION, 0, 0);
+							//semaphore.Release();
 							return;
 						}
 					}
 				}
-				
-				codeArea.Text = codeArea.Text.Insert(codeArea.SelectionStart, "    ");
-				codeArea.SelectionStart = selected + 4;
+				//semaphore.Release();
+				wrongSelection = true;
+				rightSelection = codeArea.SelectionStart;
+				codeArea.SelectedText = "    ";
+				//semaphore.WaitOne();
+				codeArea.SelectionStart += 4;
 				e.Handled = true;
 
 				//vratimo focus na code area i ponovno prikazemo selekciju
 				codeArea.Focus();
 				SendMessage(codeArea.Handle, EM_HIDESELECTION, 0, 0);
 			}
+			//semaphore.Release();
 		}
 		private void codeArea_KeyDown(object sender, System.Windows.Forms.KeyEventArgs e)
 		{

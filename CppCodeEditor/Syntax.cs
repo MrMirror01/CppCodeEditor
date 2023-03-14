@@ -36,7 +36,7 @@ namespace CppCodeEditor
 	}
 	public static class Syntax
 	{
-		public static String syntaxConfigPath = @"..\..\syntaxConfig.json";
+		public static String syntaxConfigPath = AppDomain.CurrentDomain.BaseDirectory + "\\..\\..\\syntaxConfig.json";
 		public static SyntaxContainer syntax = new SyntaxContainer();
 		public static void loadSyntax()
 		{

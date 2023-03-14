@@ -4,6 +4,7 @@
   "variableColor": "#1F4D31",
 
   "typenames": [
+    "void",
     "int",
     "bool",
     "char",

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -21,15 +22,19 @@ namespace CppCodeEditor
 		const int WM_USER = 0x400;
 		const int EM_HIDESELECTION = WM_USER + 63;
 
-		//Semaphore semaphore = new Semaphore(1, 1);
 		bool wrongSelection = false;
 		int rightSelection = 0;
 
 		public String savePath = "";
 		public String deafultSaveLocation = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+		private bool locationChanged = true;
+
 		public List<String> classNames = new List<String>();
 		public List<String> variableNames = new List<String>();
 		public List<String> allNames = new List<String>();
+
+		//duljina teksta u codeArea prije promijene
+		private int previousLength = 0;
 
 		public Form1()
 		{
@@ -39,20 +44,57 @@ namespace CppCodeEditor
 
 		private void Form1_Load(object sender, EventArgs e)
 		{
-			//fullscreen form
-			//this.TopMost = true;
-			//this.FormBorderStyle = FormBorderStyle.None;
-			//this.WindowState = FormWindowState.Maximized;
+			string[] args = Environment.GetCommandLineArgs();
+			try
+			{
+				savePath = args[1];
+				OpenFile(savePath);
+			}
+			catch{}
+
+			//full screen
+			this.WindowState = FormWindowState.Maximized;
+			AddLineNumbers();
+			LineNumberTextBox.ScrollBars = System.Windows.Forms.RichTextBoxScrollBars.None;
+		}
+
+		//Preuzeto s interneta
+		public void AddLineNumbers()
+		{
+			// create & set Point pt to (0,0)    
+			Point pt = new Point(0, 0);
+			// get First Index & First Line from richTextBox1    
+			int First_Index = codeArea.GetCharIndexFromPosition(pt);
+			int First_Line = codeArea.GetLineFromCharIndex(First_Index);
+			// set X & Y coordinates of Point pt to ClientRectangle Width & Height respectively    
+			pt.X = ClientRectangle.Width;
+			pt.Y = ClientRectangle.Height;
+			// get Last Index & Last Line from richTextBox1    
+			int Last_Index = codeArea.GetCharIndexFromPosition(pt);
+			int Last_Line = codeArea.GetLineFromCharIndex(Last_Index);
+			// set Center alignment to LineNumberTextBox    
+			LineNumberTextBox.SelectionAlignment = HorizontalAlignment.Center;
+			// set LineNumberTextBox text to null & width to getWidth() function value    
+			LineNumberTextBox.Text = "";
+			LineNumberTextBox.Width = 50;
+			// now add each line number to LineNumberTextBox upto last line    
+			for (int i = First_Line; i <= Last_Line + 2; i++)
+			{
+				LineNumberTextBox.Text += i + 1 + "\n";
+			}
 		}
 
 		private void exitToolStripMenuItem_Click(object sender, EventArgs e)
 		{
 			Application.Exit();
 		}
+
 		
+
+
 		private void codeArea_TextChanged(object sender, EventArgs e)
 		{
-			//semaphore.WaitOne();
+			AddLineNumbers();
 			if (wrongSelection)
 			{
 				codeArea.SelectionStart = rightSelection;
@@ -61,28 +103,26 @@ namespace CppCodeEditor
 
 			if (codeArea.Text.Length <= 1)
 			{
-				//semaphore.Release();
 				return;
 			}
 
-			int poc;
-			for (poc = codeArea.SelectionStart - 1; poc >= 0; poc--)
+			int currentLength = codeArea.Text.Length;
+			if (Math.Abs(currentLength - previousLength) > 1)
 			{
-				if (codeArea.Text[poc] == '\n') break;
+				replaceTabs();
+				colorKeywords(codeArea.Text, 0);
+				previousLength = currentLength;
+				return;
 			}
-			if (poc < 0) poc = 0;
-			int kraj;
-			for (kraj = codeArea.SelectionStart; kraj < codeArea.Text.Length; kraj++)
-			{
-				if (codeArea.Text[kraj] == '\n') break;
-			}
-			colorKeywords(codeArea.Text.Substring(poc, kraj - poc), poc);
-			//semaphore.Release();
+			previousLength = currentLength;
+
+			int poc = codeArea.GetFirstCharIndexOfCurrentLine();
+			int line = codeArea.GetLineFromCharIndex(poc);
+			colorKeywords(codeArea.Lines[line], poc);
 		}
 
 		private void colorKeywords(String text, int textStartIndex)
 		{
-			Console.WriteLine(text);
 			int selectedIndex = codeArea.SelectionStart;
 
 			//deselectamo codeArea i skrijemo selection
@@ -127,7 +167,6 @@ namespace CppCodeEditor
 			{
 				codeArea.Select(match.Index + textStartIndex, match.Length);
 				codeArea.SelectionColor = ColorTranslator.FromHtml(Syntax.syntax.classColor);
-				Console.WriteLine("--" + match.Value + "--");
 			}
 
 			//pobojamo sva pojavljivanja imena varijabli
@@ -137,7 +176,6 @@ namespace CppCodeEditor
 			{
 				codeArea.Select(match.Index + textStartIndex, match.Length);
 				codeArea.SelectionColor = ColorTranslator.FromHtml(Syntax.syntax.variableColor);
-				Console.WriteLine("++" + match.Value + "++");
 			}
 
 			// formira regex oblika "\b(keyword1|keyword2|keyword3)\b" 
@@ -189,8 +227,7 @@ namespace CppCodeEditor
 
 		private void codeArea_KeyPress(object sender, KeyPressEventArgs e)
 		{
-			//semaphore.WaitOne();
-			if (e.KeyChar == '(' || e.KeyChar == '[' || e.KeyChar == '{')
+			if (e.KeyChar == '(' || e.KeyChar == '[' || e.KeyChar == '{' || e.KeyChar == '"' || e.KeyChar == '\'')
 			{
 				//deselectamo codeArea i skrijemo selection
 				debug.Focus();
@@ -198,16 +235,27 @@ namespace CppCodeEditor
 
 				int selectedIndex = codeArea.SelectionStart;
 				e.Handled = true;
-				//semaphore.Release();
 				wrongSelection = true;
 				rightSelection = codeArea.SelectionStart;
-				if (e.KeyChar == '(')
-					codeArea.SelectedText = "()";
-				else if (e.KeyChar == '[')
-					codeArea.SelectedText = "[]";
-				else
-					codeArea.SelectedText = "{}";
-				//semaphore.WaitOne();
+				switch (e.KeyChar)
+				{
+					case '(':
+						codeArea.SelectedText = "()";
+						break;
+					case '[':
+						codeArea.SelectedText = "[]";
+						break;
+					case '{':
+						codeArea.SelectedText = "{}";
+						break;
+					case '"':
+						codeArea.SelectedText = "\"\"";
+						break;
+					case '\'':
+						codeArea.SelectedText = "''";
+						break;
+				}
+
 				codeArea.SelectionStart = selectedIndex + 1;
 				codeArea.SelectionLength = 0;
 
@@ -234,28 +282,23 @@ namespace CppCodeEditor
 					{
 						if (name.StartsWith(currentWord) && name != currentWord)
 						{
-							//semaphore.Release();
 							wrongSelection = true;
 							rightSelection = codeArea.SelectionStart;
 							codeArea.Select(selected - currentWord.Length, currentWord.Length);
 							codeArea.SelectedText = name;
-							//semaphore.WaitOne();
 							e.Handled = true;
 							codeArea.SelectionStart = selected + (name.Length - currentWord.Length);
 
 							//vratimo focus na code area i ponovno prikazemo selekciju
 							codeArea.Focus();
 							SendMessage(codeArea.Handle, EM_HIDESELECTION, 0, 0);
-							//semaphore.Release();
 							return;
 						}
 					}
 				}
-				//semaphore.Release();
 				wrongSelection = true;
 				rightSelection = codeArea.SelectionStart;
 				codeArea.SelectedText = "    ";
-				//semaphore.WaitOne();
 				codeArea.SelectionStart += 4;
 				e.Handled = true;
 
@@ -263,7 +306,6 @@ namespace CppCodeEditor
 				codeArea.Focus();
 				SendMessage(codeArea.Handle, EM_HIDESELECTION, 0, 0);
 			}
-			//semaphore.Release();
 		}
 		private void codeArea_KeyDown(object sender, System.Windows.Forms.KeyEventArgs e)
 		{
@@ -276,6 +318,32 @@ namespace CppCodeEditor
 				}
 				SaveFile();
 			}
+			else if (e.Control && e.KeyCode == Keys.V)
+			{
+				//maknemo formatting s zaljepljenoga texta
+				((RichTextBox)sender).Paste(DataFormats.GetFormat("Text"));
+				e.Handled = true;
+			}
+			else if (e.KeyCode == Keys.Enter)
+			{
+				int start = codeArea.GetFirstCharIndexOfCurrentLine();
+				int cnt = 0;
+				for (int i = start; i < codeArea.Text.Length; i++)
+				{
+					if (codeArea.Text[i].ToString() == " ") cnt++;
+					else break;
+				}
+
+				codeArea.SelectedText = "\n" + String.Concat(Enumerable.Repeat(" ", cnt));
+				e.Handled = true;
+			}
+		}
+
+		private void replaceTabs()
+		{
+			int selected = codeArea.SelectionStart;
+			codeArea.Text = codeArea.Text.Replace("\t", "    ");
+			codeArea.SelectionStart = selected;
 		}
 
 		private void SaveFile()
@@ -311,9 +379,127 @@ namespace CppCodeEditor
 		private void saveAsToolStripMenuItem_Click(object sender, EventArgs e)
 		{
 			savePath = "";
+			locationChanged = true;
 			SaveFile();
 		}
 
-		
+		private void Build()
+		{
+			string buildFilePath = Path.GetTempPath() + @"\build.bat";
+			if (locationChanged)
+			{
+				locationChanged = false;
+				using (StreamWriter sw = File.CreateText(buildFilePath))
+				{
+					sw.WriteLine("@echo off");
+					sw.WriteLine("cd " + Path.GetDirectoryName(savePath));
+					sw.WriteLine("@echo on");
+					sw.WriteLine("g++ " + Path.GetFileName(savePath) + " -o " + Path.GetFileNameWithoutExtension(savePath) + ".exe");
+				};
+			}
+
+			compilerOutputBox.Text = "";
+			Process build = new Process();
+			build.StartInfo.FileName = buildFilePath;
+			build.StartInfo.RedirectStandardError = true;
+			build.StartInfo.RedirectStandardOutput = true;
+			build.StartInfo.UseShellExecute = false;
+			build.StartInfo.CreateNoWindow = true;
+
+			build.Start();
+			
+			build.WaitForExit();	
+			compilerOutputBox.Text = build.StandardError.ReadToEnd();
+			if (compilerOutputBox.Text.Length == 0)
+			{
+				compilerOutputBox.Text = "Build succesfull!\n";
+			}
+		}
+
+		private void Run()
+		{
+			string runPath = Path.GetDirectoryName(savePath) + "\\" + Path.GetFileNameWithoutExtension(savePath) + ".exe";
+			try
+			{
+				Process.Start(runPath);
+			}
+			catch
+			{
+				compilerOutputBox.Text += "\nUnable to run file!";
+			}
+		}
+
+		private void buildButton_Click(object sender, EventArgs e)
+		{
+			SaveFile();
+
+			if (savePath == "")
+			{
+				compilerOutputBox.Text = "Save file first!";
+				return;
+			}
+
+			Build();
+		}
+
+		private void runButton_Click(object sender, EventArgs e)
+		{
+			if (savePath == "")
+			{
+				compilerOutputBox.Text = "Save file first!";
+				return;
+			}
+			Run();
+		}
+
+		private void buildAndRunButton_Click(object sender, EventArgs e)
+		{
+			SaveFile();
+
+			if (savePath == "")
+			{
+				compilerOutputBox.Text = "Save file first!";
+				return;
+			}
+
+			Build();
+			if (compilerOutputBox.Text == "Build succesfull!\n")
+				Run();
+		}
+
+		private void OpenFile(string openPath)
+		{
+			using (StreamReader sr = File.OpenText(openPath))
+			{
+				codeArea.Text = sr.ReadToEnd();
+			}
+			colorKeywords(codeArea.Text, 0);
+		}
+
+		private void openBtton_Click(object sender, EventArgs e)
+		{
+			using (OpenFileDialog saveFile = new OpenFileDialog())
+			{
+				saveFile.InitialDirectory = deafultSaveLocation;
+				saveFile.Filter = "C/C++ files(*.cpp)|*.cpp|All files (*.*)|*.*";
+				saveFile.FileName = "test.cpp";
+				if (saveFile.ShowDialog() == DialogResult.OK)
+				{
+					savePath = saveFile.FileName;
+				}
+				else
+				{
+					return;
+				}
+			}
+			OpenFile(savePath);
+		}
+
+		private void codeArea_VScroll(object sender, EventArgs e)
+		{
+			LineNumberTextBox.Text = "";
+			AddLineNumbers();
+			LineNumberTextBox.Invalidate();
+		}
 	}
 }
